@@ -36,17 +36,13 @@ ALLOWED_HOSTS = _env_allowed_hosts or _default_allowed_hosts
 for _host in _default_allowed_hosts:
     if _host not in ALLOWED_HOSTS:
         ALLOWED_HOSTS.append(_host)
-# Ensure Azure host is always allowed
-_azure_default_host = 'trustmark-backend-a8afdsh6h4fncdf3.malaysiawest-01.azurewebsites.net'
-if _azure_default_host not in ALLOWED_HOSTS:
-    ALLOWED_HOSTS.append(_azure_default_host)
 # Add Azure host
 AZURE_HOSTNAME = os.environ.get('WEBSITE_HOSTNAME')
 if AZURE_HOSTNAME and AZURE_HOSTNAME not in ALLOWED_HOSTS:
     ALLOWED_HOSTS.append(AZURE_HOSTNAME)
 
 CSRF_TRUSTED_ORIGINS = [
-    'https://trustmark-backend-a8afdsh6h4fncdf3.malaysiawest-01.azurewebsites.net',
+    "trustmark-backend-a8afdsh6h4fncdf3.malaysiawest-01.azurewebsites.net",
 ]
 
 # Base URLs used for event invite-link generation and redirect flows.

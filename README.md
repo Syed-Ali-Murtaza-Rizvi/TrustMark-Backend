@@ -72,24 +72,6 @@ A Django-based REST API backend for managing student attendance in educational i
 
    The API will be available at `http://localhost:8000/`
 
-## Deployment (Azure App Service)
-
-This repo includes a GitHub Actions workflow for Azure App Service deployments:
-
-- Workflow: [.github/workflows/azure-webapp.yml](.github/workflows/azure-webapp.yml)
-- Required secret: `AZURE_WEBAPP_PUBLISH_PROFILE` (download from Azure Portal > Web App > Get publish profile)
-- App Service config (Azure Portal > Configuration):
-    - `DJANGO_ALLOWED_HOSTS` (include your Azure hostname)
-    - `DJANGO_DEBUG=False`
-    - `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_HOST`, `DB_PORT`
-    - Optional: `FRONTEND_BASE_URL`, `CV_MODULE_BASE_URL`
-
-Startup command used by the workflow:
-
-```bash
-gunicorn --workers 4 --threads 4 --bind 0.0.0.0:8000 FYP_Backend.wsgi
-```
-
 ## API Endpoints
 
 ### Authentication Endpoints
