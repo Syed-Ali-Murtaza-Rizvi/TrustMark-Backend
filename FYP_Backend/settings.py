@@ -42,7 +42,7 @@ if AZURE_HOSTNAME and AZURE_HOSTNAME not in ALLOWED_HOSTS:
     ALLOWED_HOSTS.append(AZURE_HOSTNAME)
 
 CSRF_TRUSTED_ORIGINS = [
-    "trustmark-backend-a8afdsh6h4fncdf3.malaysiawest-01.azurewebsites.net",
+    "https://trustmark-backend-a8afdsh6h4fncdf3.malaysiawest-01.azurewebsites.net",
 ]
 
 # Base URLs used for event invite-link generation and redirect flows.
