@@ -30,7 +30,12 @@ SECRET_KEY = 'django-insecure-y5(s6m$eihu0hw^js7j1dfdmposk(l_877=0!b24!*4p-^19ez
 DEBUG = os.environ.get('DJANGO_DEBUG', 'True') == 'True'
 
 # Comma-separated hosts/IPs for dev access (e.g. "localhost,127.0.0.1,192.168.1.10").
-_default_allowed_hosts = ['testserver', 'localhost', '127.0.0.1']
+_default_allowed_hosts = [
+    'testserver',
+    'localhost',
+    '127.0.0.1',
+    'trustmark-backend-a8afdsh6h4fncdf3.malaysiawest-01.azurewebsites.net',
+]
 _env_allowed_hosts = [host.strip() for host in os.environ.get('DJANGO_ALLOWED_HOSTS', '').split(',') if host.strip()]
 ALLOWED_HOSTS = _env_allowed_hosts or _default_allowed_hosts
 for _host in _default_allowed_hosts:
@@ -43,6 +48,7 @@ if AZURE_HOSTNAME and AZURE_HOSTNAME not in ALLOWED_HOSTS:
 
 CSRF_TRUSTED_ORIGINS = [
     "https://trustmark-backend-a8afdsh6h4fncdf3.malaysiawest-01.azurewebsites.net",
+    "https://trust-mark-frontend.vercel.app",
 ]
 
 # Base URLs used for event invite-link generation and redirect flows.
@@ -70,6 +76,7 @@ _default_cors_origins = [
     
     'http://127.0.0.1:5173',
     'http://127.0.0.1:3000',
+    'https://trust-mark-frontend.vercel.app',
 ]
 _env_cors_origins = [origin.strip() for origin in os.environ.get('CORS_ALLOWED_ORIGINS', '').split(',') if origin.strip()]
 CORS_ALLOWED_ORIGINS = _default_cors_origins + _env_cors_origins
