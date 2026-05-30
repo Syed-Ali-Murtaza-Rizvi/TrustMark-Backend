@@ -1,0 +1,22 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Python virtual environments
+venv/
+.venv/
+env/
+
+# Django
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
+db.sqlite3
+*.log
+
+# Node / frontend
+node_modules/
+dist/
+.env
+.env.local

@@ -1,0 +1,57 @@
+Creating test database for alias 'default'...
+..........................FFF.FFF
+======================================================================
+FAIL: test_missing_roll_no_returns_400 (core.tests.StudentAttendanceSummaryTestCase)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\FYDP\FYP-Integration\FYP_Backend-main\core\tests.py", line 1983, in test_missing_roll_no_returns_400
+    self.assertEqual(response.status_code, 400)
+AssertionError: 403 != 400
+
+======================================================================
+FAIL: test_nonexistent_roll_no_returns_404 (core.tests.StudentAttendanceSummaryTestCase)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\FYDP\FYP-Integration\FYP_Backend-main\core\tests.py", line 1987, in test_nonexistent_roll_no_returns_404
+    self.assertEqual(response.status_code, 404)
+AssertionError: 403 != 404
+
+======================================================================
+FAIL: test_summary_by_roll_no (core.tests.StudentAttendanceSummaryTestCase)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\FYDP\FYP-Integration\FYP_Backend-main\core\tests.py", line 1972, in test_summary_by_roll_no
+    self.assertEqual(response.status_code, 200)
+AssertionError: 403 != 200
+
+======================================================================
+FAIL: test_course_summary_by_code (core.tests.CourseAttendanceSummaryTestCase)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\FYDP\FYP-Integration\FYP_Backend-main\core\tests.py", line 2022, in test_course_summary_by_code
+    self.assertEqual(response.status_code, 200)
+AssertionError: 403 != 200
+
+======================================================================
+FAIL: test_missing_params_returns_400 (core.tests.CourseAttendanceSummaryTestCase)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\FYDP\FYP-Integration\FYP_Backend-main\core\tests.py", line 2036, in test_missing_params_returns_400
+    self.assertEqual(response.status_code, 400)
+AssertionError: 403 != 400
+
+======================================================================
+FAIL: test_nonexistent_course_returns_404 (core.tests.CourseAttendanceSummaryTestCase)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\FYDP\FYP-Integration\FYP_Backend-main\core\tests.py", line 2040, in test_nonexistent_course_returns_404
+    self.assertEqual(response.status_code, 404)
+AssertionError: 403 != 404
+
+----------------------------------------------------------------------
+Ran 33 tests in 112.985s
+
+FAILED (failures=6)
+Destroying test database for alias 'default'...
+Found 33 test(s).
+System check identified no issues (0 silenced).

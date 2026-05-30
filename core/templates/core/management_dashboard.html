@@ -1,0 +1,44 @@
+{% extends "core/base.html" %}
+
+{% block title %}Administration Dashboard - Student Attendance Management System{% endblock %}
+
+{% block content %}
+<div class="dashboard-container">
+    <div class="dashboard-header">
+        <h1>Administration Dashboard</h1>
+        <a href="{% url 'logout-page' %}" class="btn logout-btn">Logout</a>
+    </div>
+    
+    <div class="welcome-message">
+        <h2>Welcome, {{ management_name }}!</h2>
+    </div>
+    
+    <div class="stats-grid">
+        <div class="stat-card">
+            <h3>Management ID</h3>
+            <div class="stat-value">{{ management_id }}</div>
+        </div>
+        <div class="stat-card">
+            <h3>Email</h3>
+            <div class="stat-value" style="font-size: 18px;">{{ email }}</div>
+        </div>
+        <div class="stat-card">
+            <h3>System Role</h3>
+            <div class="stat-value" style="font-size: 18px;">Administrator</div>
+        </div>
+    </div>
+    
+    <div class="course-list">
+        <h2>Administrative Functions</h2>
+        <div class="course-item">
+            <div class="course-name">System management and oversight capabilities</div>
+        </div>
+        <div class="course-item">
+            <div class="course-name">Access to all attendance records</div>
+        </div>
+        <div class="course-item">
+            <div class="course-name">User management and reporting</div>
+        </div>
+    </div>
+</div>
+{% endblock %}

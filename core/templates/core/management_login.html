@@ -1,0 +1,50 @@
+{% extends "core/base.html" %}
+
+{% block title %}Management Login - Student Attendance Management System{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1>Management Login</h1>
+    
+    <form method="post">
+        {% csrf_token %}
+        
+        <div class="form-group">
+            <label for="email">Email:</label>
+            <input type="email" id="email" name="email" required>
+            {% if form.email.errors %}
+                <ul class="errorlist">
+                    {% for error in form.email.errors %}
+                        <li>{{ error }}</li>
+                    {% endfor %}
+                </ul>
+            {% endif %}
+        </div>
+        
+        <div class="form-group">
+            <label for="password">Password:</label>
+            <input type="password" id="password" name="password" required>
+            {% if form.password.errors %}
+                <ul class="errorlist">
+                    {% for error in form.password.errors %}
+                        <li>{{ error }}</li>
+                    {% endfor %}
+                </ul>
+            {% endif %}
+        </div>
+        
+        {% if error %}
+            <div class="errorlist">
+                <li>{{ error }}</li>
+            </div>
+        {% endif %}
+        
+        <button type="submit">Login</button>
+    </form>
+    
+    <div class="link-group">
+        <p>Don't have an account? <a href="{% url 'management-register-page' %}">Register here</a></p>
+        <p><a href="{% url 'student-login-page' %}">Login as Student</a> | <a href="{% url 'teacher-login-page' %}">Login as Teacher</a></p>
+    </div>
+</div>
+{% endblock %}

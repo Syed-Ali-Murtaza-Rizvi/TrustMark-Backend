@@ -1,0 +1,25 @@
+Creating test database for alias 'default'...
+.......FF..
+======================================================================
+FAIL: test_course_summary_by_code (core.tests.CourseAttendanceSummaryTestCase)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\FYDP\FYP-Integration\FYP_Backend-main\core\tests.py", line 2134, in test_course_summary_by_code
+    self.assertEqual(response.status_code, 200)
+AssertionError: 404 != 200
+
+======================================================================
+FAIL: test_course_summary_uses_slot_count_for_total_sessions (core.tests.CourseAttendanceSummaryTestCase)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\FYDP\FYP-Integration\FYP_Backend-main\core\tests.py", line 2167, in test_course_summary_uses_slot_count_for_total_sessions
+    self.assertEqual(response.status_code, 200)
+AssertionError: 404 != 200
+
+----------------------------------------------------------------------
+Ran 11 tests in 37.262s
+
+FAILED (failures=2)
+Destroying test database for alias 'default'...
+Found 11 test(s).
+System check identified no issues (0 silenced).

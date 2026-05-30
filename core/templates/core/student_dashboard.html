@@ -1,0 +1,50 @@
+{% extends "core/base.html" %}
+
+{% block title %}Student Dashboard - Student Attendance Management System{% endblock %}
+
+{% block content %}
+<div class="dashboard-container">
+    <div class="dashboard-header">
+        <h1>Student Attendance Dashboard</h1>
+        <a href="{% url 'logout-page' %}" class="btn logout-btn">Logout</a>
+    </div>
+    
+    <div class="welcome-message">
+        <h2>Welcome, {{ student_name }}!</h2>
+    </div>
+    
+    <div class="stats-grid">
+        <div class="stat-card">
+            <h3>Overall Attendance</h3>
+            <div class="stat-value">{{ overall_attendance }}%</div>
+        </div>
+        <div class="stat-card">
+            <h3>Total Courses</h3>
+            <div class="stat-value">{{ total_courses }}</div>
+        </div>
+        <div class="stat-card">
+            <h3>Student ID</h3>
+            <div class="stat-value">{{ student_id }}</div>
+        </div>
+    </div>
+    
+    <div class="course-list">
+        <h2>Course-wise Attendance</h2>
+        {% if course_attendance %}
+            {% for course in course_attendance %}
+                <div class="course-item">
+                    <div>
+                        <div class="course-name">{{ course.course_name }}</div>
+                        <div style="font-size: 12px; color: #666;">Teacher: {{ course.teacher_name }}</div>
+                    </div>
+                    <div class="course-attendance">
+                        {{ course.attendance }}%
+                    </div>
+                </div>
+            {% endfor %}
+        {% else %}
+            <p style="text-align: center; color: #666;">No courses enrolled yet.</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,1 @@
+gunicorn --workers 4 --threads 4 FYP_Backend.wsgi

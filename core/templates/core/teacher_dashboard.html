@@ -1,0 +1,47 @@
+{% extends "core/base.html" %}
+
+{% block title %}Teacher Dashboard - Student Attendance Management System{% endblock %}
+
+{% block content %}
+<div class="dashboard-container">
+    <div class="dashboard-header">
+        <h1>Teacher Attendance Dashboard</h1>
+        <a href="{% url 'logout-page' %}" class="btn logout-btn">Logout</a>
+    </div>
+    
+    <div class="welcome-message">
+        <h2>Welcome, {{ teacher_name }}!</h2>
+    </div>
+    
+    <div class="stats-grid">
+        <div class="stat-card">
+            <h3>Teacher ID</h3>
+            <div class="stat-value">{{ teacher_id }}</div>
+        </div>
+        <div class="stat-card">
+            <h3>Total Courses</h3>
+            <div class="stat-value">{{ total_courses }}</div>
+        </div>
+        <div class="stat-card">
+            <h3>Email</h3>
+            <div class="stat-value" style="font-size: 18px;">{{ email }}</div>
+        </div>
+    </div>
+    
+    <div class="course-list">
+        <h2>Courses You Teach</h2>
+        {% if courses %}
+            {% for course in courses %}
+                <div class="course-item">
+                    <div>
+                        <div class="course-name">{{ course.course_name }}</div>
+                        <div style="font-size: 12px; color: #666;">Classes Taken: {{ course.classes_taken_count }}</div>
+                    </div>
+                </div>
+            {% endfor %}
+        {% else %}
+            <p style="text-align: center; color: #666;">No courses assigned yet.</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
