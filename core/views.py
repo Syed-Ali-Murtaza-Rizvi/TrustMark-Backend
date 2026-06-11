@@ -1377,7 +1377,7 @@ class ManagementBulkUpdateStudentCoursesView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        course_ids = serializer.validated_data['course_ids']
+        raw_ids = serializer.validated_data['course_ids']
         program = (program or '').strip()
         if not program:
             return Response(
@@ -1398,29 +1398,58 @@ class ManagementBulkUpdateStudentCoursesView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        scoped_courses = _courses_queryset_for_management(management).filter(course_id__in=course_ids)
+        # Resolve provided identifiers (mix of numeric ids and course codes) to Course objects
+        numeric_ids = []
+        codes = []
+        for ident in raw_ids:
+            if str(ident).isdigit():
+                try:
+                    numeric_ids.append(int(ident))
+                except (ValueError, TypeError):
+                    codes.append(str(ident))
+            else:
+                codes.append(str(ident))
+
+        scoped_qs = _courses_queryset_for_management(management)
+        scoped_courses = scoped_qs.filter(
+            Q(course_id__in=numeric_ids) | Q(course_code__in=codes)
+        ) if (numeric_ids or codes) else scoped_qs.none()
+
         courses_by_id = {course.course_id: course for course in scoped_courses}
-        missing_course_ids = [course_id for course_id in course_ids if course_id not in courses_by_id]
-        if missing_course_ids:
+
+        # Identify missing identifiers
+        found_codes = {c.course_code for c in scoped_courses}
+        missing = []
+        for ident in raw_ids:
+            if str(ident).isdigit():
+                if int(ident) not in courses_by_id:
+                    missing.append(str(ident))
+            else:
+                if ident not in found_codes:
+                    missing.append(ident)
+
+        if missing:
             return Response(
                 {
                     'success': False,
                     'message': (
-                        f'Course ID(s) {", ".join(map(str, missing_course_ids))} '
+                        f'Course identifier(s) {", ".join(map(str, missing))} '
                         'are invalid or not available for this management.'
                     ),
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        taught_by_course = _prefetch_taught_courses_by_course(management, course_ids)
+        # Use resolved numeric course IDs for downstream logic
+        resolved_course_ids = list(courses_by_id.keys())
+        taught_by_course = _prefetch_taught_courses_by_course(management, resolved_course_ids)
         planned_rows = []
 
         try:
             for student in students:
                 assignments = _resolve_assignments_from_course_ids(
                     student,
-                    course_ids,
+                    resolved_course_ids,
                     courses_by_id,
                     taught_by_course,
                 )
@@ -1450,7 +1479,7 @@ class ManagementBulkUpdateStudentCoursesView(APIView):
                 'success': True,
                 'message': 'Courses updated successfully.',
                 'students_updated': len(students),
-                'courses_assigned': len(course_ids),
+                'courses_assigned': len(raw_ids),
             },
             status=status.HTTP_200_OK,
         )

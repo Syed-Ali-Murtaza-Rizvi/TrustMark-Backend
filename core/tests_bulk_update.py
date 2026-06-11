@@ -65,3 +65,17 @@ class ManagementBulkUpdateStudentCoursesTestCase(APITestCase):
         self.assertTrue(Teacher.objects.filter(teacher_id=self.teacher.teacher_id).exists())
         self.assertTrue(TaughtCourse.objects.filter(teacher=self.teacher, course=self.course1).exists())
         self.assertTrue(TaughtCourse.objects.filter(teacher=self.teacher, course=self.course2).exists())
+
+    def test_bulk_update_accepts_course_codes(self):
+        """API should accept non-numeric course identifiers (course codes)"""
+        url = reverse('management-bulk-update-student-courses', args=[self.management.Management_id, self.program, self.year])
+        payload = {'course_ids': [self.course1.course_code, self.course2.course_code]}
+
+        response = self.client.post(url, payload, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data.get('success'))
+
+        sc1 = StudentCourse.objects.filter(student=self.student1).order_by('course__course_id')
+        sc2 = StudentCourse.objects.filter(student=self.student2).order_by('course__course_id')
+        self.assertEqual(sc1.count(), 2)
+        self.assertEqual(sc2.count(), 2)
