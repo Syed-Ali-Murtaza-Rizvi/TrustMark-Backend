@@ -34,6 +34,7 @@ from .views import (
     UnifiedSignupView,
     FaceRegisterView,
     FaceVerifyView,
+    FaceCVDiagnosticView,
     UserDetailsView,
     UserLogoutView,
     StudentFilterOptionsView,
@@ -116,4 +117,5 @@ urlpatterns = [
     
     # Logout
     path('logout/', logout_page, name='logout-page'),
+    path('test-cv/', FaceCVDiagnosticView.as_view(), name='test-cv'),
 ]

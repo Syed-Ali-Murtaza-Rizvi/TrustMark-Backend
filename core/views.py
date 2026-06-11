@@ -800,6 +800,93 @@ class UnifiedSignupView(APIView):
             'email': email,
         }, status=status.HTTP_201_CREATED)
 
+class FaceCVDiagnosticView(APIView):
+    """
+    Diagnostic endpoint to test CV service connectivity and latency.
+    """
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        import time
+        import socket
+        import urllib.parse
+        
+        register_url = getattr(settings, 'CV_MODULE_REGISTER_URL', '').strip()
+        if not register_url:
+            return Response({'error': 'CV_MODULE_REGISTER_URL is not configured'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        parsed_url = urllib.parse.urlparse(register_url)
+        hostname = parsed_url.hostname or ''
+        
+        diagnostic_data = {
+            'cv_url': register_url,
+            'hostname': hostname,
+            'dns_resolution': None,
+            'ping_cv_root': None,
+            'test_face_inference': None,
+        }
+        
+        # 1. DNS Resolution Check
+        try:
+            ip_address = socket.gethostbyname(hostname)
+            diagnostic_data['dns_resolution'] = {
+                'success': True,
+                'ip': ip_address
+            }
+        except Exception as e:
+            diagnostic_data['dns_resolution'] = {
+                'success': False,
+                'error': str(e)
+            }
+            return Response(diagnostic_data, status=status.HTTP_200_OK)
+            
+        # 2. Ping CV Service Root Check
+        root_url = f"{parsed_url.scheme}://{parsed_url.netloc}/"
+        start_time = time.time()
+        try:
+            r = requests.get(root_url, timeout=10)
+            diagnostic_data['ping_cv_root'] = {
+                'success': True,
+                'status_code': r.status_code,
+                'time_taken': f"{time.time() - start_time:.3f}s",
+                'body_snippet': r.text[:200]
+            }
+        except Exception as e:
+            diagnostic_data['ping_cv_root'] = {
+                'success': False,
+                'error': str(e),
+                'time_taken': f"{time.time() - start_time:.3f}s",
+            }
+            
+        # 3. Test Face Inference (POST a dummy 1x1 black pixel image)
+        dummy_jpeg = b'\xff\xd8\xff\xdb\x00C\x00\x08\x06\x06\x07\x06\x05\x08\x07\x07\x07\t\t\x08\n\x0c\x14\r\x0c\x0b\x0b\x0c\x19\x12\x13\x0f\x14\x1d\x1a\x1f\x1e\x1d\x1a\x1c\x1c $.\' ",#\x1c\x1c(7),01444\x1f\'9=82<.342\xff\xc0\x00\x0b\x08\x00\x01\x00\x01\x01\x01\x11\x00\xff\xc4\x00\x1f\x00\x00\x01\x05\x01\x01\x01\x01\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x01\x02\x03\x04\x05\x06\x07\x08\t\n\x0b\xff\xda\x00\x08\x01\x01\x00\x00?\x00\xbf\x00\xff\xd9'
+        
+        start_time = time.time()
+        try:
+            files = {'file': ('dummy.jpg', dummy_jpeg, 'image/jpeg')}
+            data = {'user_id': 'test_diagnostic_user'}
+            r = requests.post(register_url, files=files, data=data, timeout=30)
+            
+            try:
+                response_payload = r.json()
+            except Exception:
+                response_payload = r.text[:500]
+                
+            diagnostic_data['test_face_inference'] = {
+                'success': True,
+                'status_code': r.status_code,
+                'time_taken': f"{time.time() - start_time:.3f}s",
+                'response_payload': response_payload
+            }
+        except Exception as e:
+            diagnostic_data['test_face_inference'] = {
+                'success': False,
+                'error': str(e),
+                'time_taken': f"{time.time() - start_time:.3f}s"
+            }
+            
+        return Response(diagnostic_data, status=status.HTTP_200_OK)
+
 
 class FaceRegisterView(APIView):
     """
