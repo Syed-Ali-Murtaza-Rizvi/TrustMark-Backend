@@ -10,6 +10,31 @@ from .models import (
 
 # ============ Model Serializers for CRUD operations ============
 
+class ManagementBulkUpdateStudentCoursesSerializer(serializers.Serializer):
+    # Accept numeric IDs or non-numeric course identifiers (e.g. course codes like 'CS101').
+    course_ids = serializers.ListField(
+        child=serializers.CharField(),
+        allow_empty=False,
+    )
+
+    def validate_course_ids(self, value):
+        if not value:
+            raise serializers.ValidationError('course_ids must contain at least one course identifier.')
+        # Normalize to strings and remove duplicates while preserving order
+        seen = set()
+        normalized = []
+        for item in value:
+            s = str(item).strip()
+            if not s:
+                continue
+            if s not in seen:
+                seen.add(s)
+                normalized.append(s)
+        if not normalized:
+            raise serializers.ValidationError('course_ids must contain at least one valid identifier.')
+        return normalized
+
+
 class StudentCourseInlineSerializer(serializers.ModelSerializer):
     """Inline courses for StudentSerializer"""
     course_id = serializers.IntegerField(source='course.course_id', read_only=True)

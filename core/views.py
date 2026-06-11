@@ -1102,6 +1102,74 @@ def _count_csv_entries(value):
     return len([item.strip() for item in (value or '').split(',') if item.strip()])
 
 
+def _courses_queryset_for_management(management):
+    return Course.objects.filter(
+        Q(taught_courses__teacher__management=management) |
+        Q(student_courses__student__management=management)
+    ).distinct()
+
+
+def _prefetch_taught_courses_by_course(management, course_ids):
+    taught_by_course = {course_id: [] for course_id in course_ids}
+    taught_qs = (
+        TaughtCourse.objects.filter(
+            course_id__in=course_ids,
+            teacher__management=management,
+        )
+        .select_related('teacher', 'course')
+    )
+    for taught in taught_qs:
+        taught_by_course[taught.course_id].append(taught)
+    return taught_by_course
+
+
+def _resolve_assignments_from_course_ids(student, course_ids, courses_by_id, taught_by_course):
+    assignments = []
+    for course_id in course_ids:
+        course = courses_by_id.get(course_id)
+        if course is None:
+            raise ValueError(f'Course ID {course_id} is invalid or not available for this management.')
+
+        taught_list = taught_by_course.get(course_id, [])
+        offered_years = sorted({tc.year for tc in taught_list if tc.year is not None})
+        if offered_years and student.year not in offered_years:
+            raise ValueError(
+                f'Course ID {course_id} is not offered for year {student.year} '
+                f'(student {student.student_rollNo}).'
+            )
+
+        taught = None
+        for tc in taught_list:
+            if (
+                tc.section == student.section
+                and tc.year == student.year
+                and tc.teacher
+                and UnifiedSignupView._program_matches(tc.teacher.programs, student.dept)
+            ):
+                taught = tc
+                break
+
+        if not taught or not taught.teacher_id:
+            raise ValueError(
+                f'No teacher mapping for course ID {course_id} for student {student.student_rollNo} '
+                f'(section {student.section}, year {student.year}, program {student.dept}).'
+            )
+
+        assignments.append((course, taught.teacher))
+    return assignments
+
+
+def _user_can_manage_management(user, management):
+    if user.is_superuser:
+        return True
+    user_management = _get_management_for_user(user)
+    return bool(
+        user_management
+        and management
+        and user_management.Management_id == management.Management_id
+    )
+
+
 # ============ CRUD ViewSets for all models ============
 
 class StudentViewSet(viewsets.ModelViewSet):
@@ -1273,6 +1341,148 @@ class StudentViewSet(viewsets.ModelViewSet):
             'courses': created_courses,
             'skipped_courses': skipped_courses,
         }, status=status.HTTP_200_OK)
+
+
+class ManagementBulkUpdateStudentCoursesView(APIView):
+    """
+    Replace courses for all students in a management + program + year cohort.
+
+    POST /api/managements/{management_id}/programs/{program}/years/{year}/bulk-update-student-courses/
+    Body: { "course_ids": [1, 2, 3] }
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, management_id, program, year):
+        from .serializers import ManagementBulkUpdateStudentCoursesSerializer
+
+        management = Management.objects.filter(Management_id=management_id).first()
+        if not management:
+            return Response(
+                {'success': False, 'message': 'Management not found.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if not _user_can_manage_management(request.user, management):
+            return Response(
+                {'success': False, 'message': 'Permission denied.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        serializer = ManagementBulkUpdateStudentCoursesSerializer(data=request.data)
+        if not serializer.is_valid():
+            message = next(iter(serializer.errors.values()))[0]
+            return Response(
+                {'success': False, 'message': str(message)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        raw_ids = serializer.validated_data['course_ids']
+        program = (program or '').strip()
+        if not program:
+            return Response(
+                {'success': False, 'message': 'Program is required.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        students = list(
+            Student.objects.filter(
+                management_id=management.Management_id,
+                dept=program,
+                year=year,
+            ).select_related('management')
+        )
+        if not students:
+            return Response(
+                {'success': False, 'message': 'No students found for the given management, program, and year.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Resolve provided identifiers (mix of numeric ids and course codes) to Course objects
+        numeric_ids = []
+        codes = []
+        for ident in raw_ids:
+            if str(ident).isdigit():
+                try:
+                    numeric_ids.append(int(ident))
+                except (ValueError, TypeError):
+                    codes.append(str(ident))
+            else:
+                codes.append(str(ident))
+
+        scoped_qs = _courses_queryset_for_management(management)
+        scoped_courses = scoped_qs.filter(
+            Q(course_id__in=numeric_ids) | Q(course_code__in=codes)
+        ) if (numeric_ids or codes) else scoped_qs.none()
+
+        courses_by_id = {course.course_id: course for course in scoped_courses}
+
+        # Identify missing identifiers
+        found_codes = {c.course_code for c in scoped_courses}
+        missing = []
+        for ident in raw_ids:
+            if str(ident).isdigit():
+                if int(ident) not in courses_by_id:
+                    missing.append(str(ident))
+            else:
+                if ident not in found_codes:
+                    missing.append(ident)
+
+        if missing:
+            return Response(
+                {
+                    'success': False,
+                    'message': (
+                        f'Course identifier(s) {", ".join(map(str, missing))} '
+                        'are invalid or not available for this management.'
+                    ),
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Use resolved numeric course IDs for downstream logic
+        resolved_course_ids = list(courses_by_id.keys())
+        taught_by_course = _prefetch_taught_courses_by_course(management, resolved_course_ids)
+        planned_rows = []
+
+        try:
+            for student in students:
+                assignments = _resolve_assignments_from_course_ids(
+                    student,
+                    resolved_course_ids,
+                    courses_by_id,
+                    taught_by_course,
+                )
+                for course, teacher in assignments:
+                    planned_rows.append(
+                        StudentCourse(
+                            student=student,
+                            course=course,
+                            teacher=teacher,
+                            classes_attended_count=0,
+                            classes_absent_count=0,
+                        )
+                    )
+        except ValueError as exc:
+            return Response(
+                {'success': False, 'message': str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        student_ids = [student.student_id for student in students]
+        with transaction.atomic():
+            StudentCourse.objects.filter(student_id__in=student_ids).delete()
+            StudentCourse.objects.bulk_create(planned_rows, batch_size=500)
+
+        return Response(
+            {
+                'success': True,
+                'message': 'Courses updated successfully.',
+                'students_updated': len(students),
+                'courses_assigned': len(raw_ids),
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 class StudentFilterOptionsView(APIView):

@@ -38,6 +38,7 @@ from .views import (
     UserDetailsView,
     UserLogoutView,
     StudentFilterOptionsView,
+    ManagementBulkUpdateStudentCoursesView,
     TeacherFilterOptionsView,
     StudentAttendanceSummaryView,
     CourseAttendanceSummaryView,
@@ -70,6 +71,11 @@ urlpatterns = [
     # Explicit filter option endpoints must appear before router detail routes.
     path('students/filter-options/', StudentFilterOptionsView.as_view(), name='student-filter-options'),
     path('teachers/filter-options/', TeacherFilterOptionsView.as_view(), name='teacher-filter-options'),
+    path(
+        'managements/<int:management_id>/programs/<str:program>/years/<int:year>/bulk-update-student-courses/',
+        ManagementBulkUpdateStudentCoursesView.as_view(),
+        name='management-bulk-update-student-courses',
+    ),
 
     # CRUD API endpoints (from router)
     path('', include(router.urls)),
