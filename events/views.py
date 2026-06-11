@@ -45,11 +45,16 @@ def _is_event_upcoming(event):
 def _event_from_registration_token(token):
     if not token:
         return None
-    # New token field first, then legacy URL field
+    token = token.strip().strip('/')
+    # New token field first
     event = Event.objects.filter(registration_token=token).first()
     if event:
         return event
-    return Event.objects.filter(registration_link__iendswith=f"/{token}").first()
+    # Fallback to legacy fields, checking with/without trailing slash
+    event = Event.objects.filter(registration_link__icontains=f"/{token}").first()
+    if event:
+        return event
+    return None
 
 
 def _registration_has_face(registration):
@@ -60,11 +65,16 @@ def _registration_has_face(registration):
 def _event_from_attendance_token(token):
     if not token:
         return None
-    # New token field first, then legacy URL field
+    token = token.strip().strip('/')
+    # New token field first
     event = Event.objects.filter(attendance_token=token).first()
     if event:
         return event
-    return Event.objects.filter(attendance_qr_code_url__iendswith=f"/{token}").first()
+    # Fallback to legacy fields
+    event = Event.objects.filter(attendance_qr_code_url__icontains=f"/{token}").first()
+    if event:
+        return event
+    return None
 
 
 def _verify_face_for_user(user, uploaded_file, stored_embedding=None):

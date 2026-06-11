@@ -1,5 +1,6 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
+from rest_framework_simplejwt.views import TokenRefreshView
 from .views import (
     StudentRegistrationView,
     TeacherRegistrationView,
@@ -59,6 +60,7 @@ urlpatterns = [
     # These match the URLs defined in the frontend's common/index.js
     path('login', UnifiedLoginView.as_view(), name='unified-login'),
     path('signup', UnifiedSignupView.as_view(), name='unified-signup'),
+    path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('face/register/', FaceRegisterView.as_view(), name='face-register'),
     path('face/verify/', FaceVerifyView.as_view(), name='face-verify'),
     path('user-details', UserDetailsView.as_view(), name='user-details'),
