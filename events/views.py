@@ -456,6 +456,24 @@ class EventAttendanceByLinkView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
+        # Enforce scanning only on the day of the event
+        today = timezone.now().date()
+        event_date = event.event_date
+        if not event_date and event.start_time:
+            event_date = event.start_time.date()
+
+        if event_date:
+            if today < event_date:
+                return Response(
+                    {'error': f'Attendance scanning is not open yet. This event is scheduled for {event_date.strftime("%B %d, %Y")}.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            elif today > event_date:
+                return Response(
+                    {'error': f'Attendance is closed. This event was scheduled for {event_date.strftime("%B %d, %Y")}.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
         if not _is_event_upcoming(event):
             return Response(
                 {'error': 'Attendance is closed for this event'},
