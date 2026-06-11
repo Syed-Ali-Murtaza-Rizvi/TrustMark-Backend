@@ -10,6 +10,18 @@ from .models import (
 
 # ============ Model Serializers for CRUD operations ============
 
+class ManagementBulkUpdateStudentCoursesSerializer(serializers.Serializer):
+    course_ids = serializers.ListField(
+        child=serializers.IntegerField(min_value=1),
+        allow_empty=False,
+    )
+
+    def validate_course_ids(self, value):
+        if not value:
+            raise serializers.ValidationError('course_ids must contain at least one course ID.')
+        return list(dict.fromkeys(value))
+
+
 class StudentCourseInlineSerializer(serializers.ModelSerializer):
     """Inline courses for StudentSerializer"""
     course_id = serializers.IntegerField(source='course.course_id', read_only=True)
