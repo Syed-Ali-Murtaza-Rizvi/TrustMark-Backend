@@ -3,16 +3,18 @@ from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.exceptions import NotFound, PermissionDenied
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.conf import settings
 from django.shortcuts import get_object_or_404, redirect
 from django.db import models
 from django.utils import timezone
+from django.views.decorators.cache import never_cache
+from django.utils.decorators import method_decorator
 import json
 import requests
 
 from .models import Event, Registration, Attendance, EventParticipant
-from core.models import UserFaceEmbedding
 from core.views import register_face_with_cv_module, FaceRegistrationServiceError
 from .serializers import (
     EventSerializer,
@@ -43,21 +45,33 @@ def _is_event_upcoming(event):
 def _event_from_registration_token(token):
     if not token:
         return None
+    # New token field first, then legacy URL field
+    event = Event.objects.filter(registration_token=token).first()
+    if event:
+        return event
     return Event.objects.filter(registration_link__iendswith=f"/{token}").first()
+
+
+def _registration_has_face(registration):
+    embedding = registration.face_embedding
+    return isinstance(embedding, list) and len(embedding) > 0
 
 
 def _event_from_attendance_token(token):
     if not token:
         return None
+    # New token field first, then legacy URL field
+    event = Event.objects.filter(attendance_token=token).first()
+    if event:
+        return event
     return Event.objects.filter(attendance_qr_code_url__iendswith=f"/{token}").first()
 
 
-def _verify_face_for_user(user, uploaded_file):
+def _verify_face_for_user(user, uploaded_file, stored_embedding=None):
     if uploaded_file is None:
         return False, {'error': 'face_image file is required'}
 
-    profile = UserFaceEmbedding.objects.filter(user=user).first()
-    if not profile or not profile.embedding:
+    if not stored_embedding:
         return False, {'error': 'No registered face embedding found for this user'}
 
     verify_url = getattr(settings, 'CV_MODULE_VERIFY_URL', '').strip()
@@ -68,7 +82,7 @@ def _verify_face_for_user(user, uploaded_file):
     uploaded_file.seek(0)
     content_type = getattr(uploaded_file, 'content_type', None) or 'application/octet-stream'
     files = {'file': (uploaded_file.name, uploaded_file.read(), content_type)}
-    data = {'stored_embedding': json.dumps(profile.embedding)}
+    data = {'stored_embedding': json.dumps(stored_embedding)}
 
     try:
         cv_resp = requests.post(verify_url, files=files, data=data, timeout=timeout_seconds)
@@ -87,6 +101,16 @@ def _verify_face_for_user(user, uploaded_file):
     return is_match, payload
 
 
+def _normalize_event_pk(pk):
+    """Accept numeric ids and legacy 'evt-123' style ids from older clients."""
+    if pk is None:
+        return None
+    text = str(pk).strip()
+    if text.startswith('evt-'):
+        text = text[4:]
+    return text
+
+
 class EventViewSet(viewsets.ModelViewSet):
     queryset = Event.objects.all()
     serializer_class = EventSerializer
@@ -95,6 +119,20 @@ class EventViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         # Event admins should manage only their own events.
         return Event.objects.filter(organiser=self.request.user).order_by('-created_at')
+
+    def get_object(self):
+        pk = _normalize_event_pk(self.kwargs.get(self.lookup_field, self.kwargs.get('pk')))
+        if not pk:
+            raise NotFound('Event id is required.')
+
+        owned = self.filter_queryset(self.get_queryset()).filter(pk=pk).first()
+        if owned is not None:
+            return owned
+
+        if Event.objects.filter(pk=pk).exists():
+            raise PermissionDenied('You do not have permission to modify this event.')
+
+        raise NotFound('Event not found.')
 
     def perform_create(self, serializer):
         serializer.save(organiser=self.request.user)
@@ -214,6 +252,7 @@ class AttendanceViewSet(viewsets.ReadOnlyModelViewSet):
         return Attendance.objects.filter(models.Q(registration__user=user) | models.Q(registration__event__organiser=user))
 
 
+@method_decorator(never_cache, name='dispatch')
 class ParticipantDashboardView(APIView):
     """Participant dashboard: list upcoming events with registration/attendance status."""
 
@@ -261,6 +300,8 @@ class ParticipantDashboardView(APIView):
         upcoming_events = []
         past_events = []
         for reg in registrations:
+            if not _registration_has_face(reg):
+                continue
             event = reg.event
             is_upcoming = False
             if event.event_date and event.event_date >= today:
@@ -294,10 +335,18 @@ class EventRegisterByLinkView(APIView):
         event = _event_from_registration_token(token)
         if not event:
             return Response({'error': 'Invalid registration link'}, status=status.HTTP_404_NOT_FOUND)
+
+        already_registered = False
+        if request.user and request.user.is_authenticated:
+            registration = Registration.objects.filter(user=request.user, event=event).first()
+            if registration and _registration_has_face(registration):
+                already_registered = True
+
         return Response({
             'eventId': event.id,
             'title': event.title,
             'isUpcoming': _is_event_upcoming(event),
+            'alreadyRegistered': already_registered,
         })
 
     def post(self, request, token):
@@ -321,13 +370,43 @@ class EventRegisterByLinkView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        registration, created = Registration.objects.get_or_create(user=request.user, event=event)
+        registration = Registration.objects.filter(user=request.user, event=event).first()
+        if registration and _registration_has_face(registration):
+            return Response({
+                'message': 'Already registered for this event',
+                'eventId': event.id,
+                'registrationId': registration.id,
+                'alreadyRegistered': True,
+            }, status=status.HTTP_200_OK)
+
         return Response({
-            'message': 'Registered successfully' if created else 'Already registered for this event',
+            'message': 'Complete face registration to join this event',
             'eventId': event.id,
-            'registrationId': registration.id,
-            'alreadyRegistered': not created,
-        }, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+            'requiresFaceRegistration': True,
+            'alreadyRegistered': False,
+        }, status=status.HTTP_200_OK)
+
+    def delete(self, request, token):
+        """Cancel a pending registration (no face captured yet)."""
+        event = _event_from_registration_token(token)
+        if not event:
+            return Response({'error': 'Invalid registration link'}, status=status.HTTP_404_NOT_FOUND)
+
+        if not request.user or not request.user.is_authenticated:
+            return Response({'error': 'Authentication required'}, status=status.HTTP_401_UNAUTHORIZED)
+
+        registration = Registration.objects.filter(user=request.user, event=event).first()
+        if not registration:
+            return Response({'message': 'No registration to cancel'}, status=status.HTTP_200_OK)
+
+        if _registration_has_face(registration):
+            return Response(
+                {'error': 'Cannot cancel a completed registration'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        registration.delete()
+        return Response({'message': 'Registration cancelled'}, status=status.HTTP_200_OK)
 
 
 class EventAttendanceByLinkView(APIView):
@@ -361,9 +440,9 @@ class EventAttendanceByLinkView(APIView):
             )
 
         registration = Registration.objects.filter(user=request.user, event=event).first()
-        if not registration:
+        if not registration or not _registration_has_face(registration):
             return Response(
-                {'error': 'You must register for this event before marking attendance'},
+                {'error': 'You must complete event registration (including face capture) before marking attendance'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
@@ -374,7 +453,7 @@ class EventAttendanceByLinkView(APIView):
             )
 
         face_image = request.FILES.get('face_image') or request.FILES.get('file')
-        is_match, verify_payload = _verify_face_for_user(request.user, face_image)
+        is_match, verify_payload = _verify_face_for_user(request.user, face_image, stored_embedding=registration.face_embedding)
         if not is_match:
             message = verify_payload.get('error') or 'Face does not match, please try again.'
             return Response(
@@ -440,43 +519,43 @@ class RegisterFaceForEventView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Find registration
+        event = None
         registration = None
         if registration_id:
             try:
                 registration = Registration.objects.get(
                     id=registration_id,
-                    user=request.user
+                    user=request.user,
                 )
+                event = registration.event
             except Registration.DoesNotExist:
                 return Response(
                     {'error': 'Registration not found or you are not the participant'},
-                    status=status.HTTP_404_NOT_FOUND
+                    status=status.HTTP_404_NOT_FOUND,
                 )
         elif event_token:
             event = _event_from_registration_token(event_token)
             if not event:
                 return Response(
                     {'error': 'Invalid event token'},
-                    status=status.HTTP_400_BAD_REQUEST
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if not _is_event_upcoming(event):
+                return Response(
+                    {'error': 'Registration is closed for this event'},
+                    status=status.HTTP_400_BAD_REQUEST,
                 )
             registration = Registration.objects.filter(
                 user=request.user,
-                event=event
+                event=event,
             ).first()
-            if not registration:
-                return Response(
-                    {'error': 'You are not registered for this event'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
         else:
             return Response(
                 {'error': 'registration_id or event_token is required'},
-                status=status.HTTP_400_BAD_REQUEST
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Check if already has face embedding
-        if registration.face_embedding:
+        if registration and _registration_has_face(registration):
             return Response(
                 {'error': 'Face already registered for this event'},
                 status=status.HTTP_400_BAD_REQUEST
@@ -508,7 +587,12 @@ class RegisterFaceForEventView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Save embedding to registration
+        if registration is None:
+            registration, _ = Registration.objects.get_or_create(
+                user=request.user,
+                event=event,
+            )
+
         registration.face_embedding = embedding
         registration.save(update_fields=['face_embedding'])
 
