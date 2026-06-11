@@ -22,7 +22,13 @@ class Event(models.Model):
     registration_start = models.DateTimeField(null=True, blank=True)
     registration_end = models.DateTimeField(null=True, blank=True)
 
-    # QR Codes / Links
+    # Tokens (UUID hex strings) — full URLs are built dynamically in the serializer
+    # so they always reflect the current ngrok / deployment URL from settings.
+    attendance_token = models.CharField(max_length=64, blank=True)
+    event_qr_token = models.CharField(max_length=64, blank=True)
+    registration_token = models.CharField(max_length=64, blank=True)
+
+    # Legacy URL fields kept for backwards-compatible token lookups on old rows.
     attendance_qr_code_url = models.URLField(blank=True)
     event_qr_code_url = models.URLField(blank=True)
     registration_link = models.URLField(blank=True)
@@ -38,20 +44,13 @@ class Event(models.Model):
         return self.title
 
     def save(self, *args, **kwargs):
-        """Generate unique URLs when the event is first created."""
-        # Use a stable base URL; in production you may want to override this via settings.
-        base_url = getattr(settings, 'DEFAULT_EVENT_BASE_URL', 'http://localhost:8000')
-
-        def _make_url(path_prefix: str) -> str:
-            token = uuid.uuid4().hex
-            return f"{base_url}/{path_prefix}/{token}"
-
-        if not self.registration_link:
-            self.registration_link = _make_url('event-register')
-        if not self.event_qr_code_url:
-            self.event_qr_code_url = _make_url('event-qr')
-        if not self.attendance_qr_code_url:
-            self.attendance_qr_code_url = _make_url('attendance-qr')
+        """Generate unique tokens when the event is first created."""
+        if not self.registration_token:
+            self.registration_token = uuid.uuid4().hex
+        if not self.event_qr_token:
+            self.event_qr_token = uuid.uuid4().hex
+        if not self.attendance_token:
+            self.attendance_token = uuid.uuid4().hex
 
         super().save(*args, **kwargs)
 

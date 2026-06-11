@@ -4,6 +4,7 @@ from django.core.exceptions import ValidationError
 import base64
 import io
 import qrcode
+from django.conf import settings
 from django.utils import timezone
 from rest_framework import serializers
 from .models import Event, Registration, Attendance, EventParticipant
@@ -29,10 +30,8 @@ class EventSerializer(serializers.ModelSerializer):
         source='registration_end', required=False, allow_null=True, format='%Y-%m-%d',
     )
 
-    # 'registrationLink' ← registration_link
-    registrationLink = serializers.URLField(
-        source='registration_link', required=False, allow_blank=True, default='',
-    )
+    # 'registrationLink' ← dynamically built from registration_token + settings
+    registrationLink = serializers.SerializerMethodField()
 
     # 'qrImage' ← attendance_qr_code_url
     qrImage = serializers.SerializerMethodField()
@@ -102,16 +101,50 @@ class EventSerializer(serializers.ModelSerializer):
             })
         return result
 
+    # ── Helper: resolve token from new token field or legacy full-URL field ──────
+
+    @staticmethod
+    def _resolve_registration_token(obj):
+        """Return the registration token (UUID hex) for an event."""
+        if obj.registration_token:
+            return obj.registration_token
+        # Fallback: extract token from legacy full URL  (…/event-register/<token>)
+        if obj.registration_link:
+            return obj.registration_link.rstrip('/').rsplit('/', 1)[-1]
+        return ''
+
+    @staticmethod
+    def _resolve_attendance_token(obj):
+        if obj.attendance_token:
+            return obj.attendance_token
+        if obj.attendance_qr_code_url:
+            return obj.attendance_qr_code_url.rstrip('/').rsplit('/', 1)[-1]
+        return ''
+
+    def get_registrationLink(self, obj):
+        """Build the full registration URL dynamically from current settings."""
+        token = self._resolve_registration_token(obj)
+        if not token:
+            return ''
+        base_url = getattr(settings, 'DEFAULT_EVENT_BASE_URL', 'http://localhost:8000').rstrip('/')
+        return f"{base_url}/event-register/{token}"
+
     def get_qrImage(self, obj):
         """Return a scannable QR image as base64 data URL for this event."""
-        qr_payload = obj.attendance_qr_code_url or obj.registration_link or f"event:{obj.id}"
+        token = self._resolve_attendance_token(obj)
+        if token:
+            base_url = getattr(settings, 'DEFAULT_EVENT_BASE_URL', 'http://localhost:8000').rstrip('/')
+            qr_payload = f"{base_url}/attendance-qr/{token}"
+        else:
+            qr_payload = f"event:{obj.id}"
+
         qr = qrcode.QRCode(version=1, box_size=10, border=5)
         qr.add_data(qr_payload)
         qr.make(fit=True)
         img = qr.make_image(fill_color="black", back_color="white")
 
         buffer = io.BytesIO()
-        img.save(buffer, format='PNG')
+        img.save(buffer)
         img_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
         return f'data:image/png;base64,{img_base64}'
 
