@@ -45,13 +45,27 @@ class IsOwnerOrReadOnly(permissions.BasePermission):
 
 
 def _is_event_upcoming(event):
-    now = timezone.now()
+    from datetime import timedelta
+    import datetime
+    now = timezone.now() + timedelta(hours=5)
     today = now.date()
-    if event.event_date:
-        return event.event_date >= today
+    
+    event_date = event.event_date
+    if isinstance(event_date, str):
+        for fmt in ("%Y-%m-%d", "%m/%d/%Y", "%d-%m-%Y", "%Y/%m/%d"):
+            try:
+                event_date = datetime.datetime.strptime(event_date, fmt).date()
+                break
+            except ValueError:
+                continue
+
+    if isinstance(event_date, datetime.date):
+        return event_date >= today
     if event.start_time:
-        return event.start_time >= now
+        # Convert start_time to GMT+5 timezone offset
+        return event.start_time + timedelta(hours=5) >= now
     return False
+
 
 
 def _event_from_registration_token(token):
@@ -468,13 +482,25 @@ class EventAttendanceByLinkView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Enforce scanning only on the day of the event
-        today = timezone.now().date()
+
+
+        # Enforce scanning only on the day of the event (GMT+5 Pakistan Standard Time)
+        from datetime import timedelta
+        import datetime
+        today = (timezone.now() + timedelta(hours=5)).date()
         event_date = event.event_date
         if not event_date and event.start_time:
             event_date = event.start_time.date()
 
-        if event_date:
+        if isinstance(event_date, str):
+            for fmt in ("%Y-%m-%d", "%m/%d/%Y", "%d-%m-%Y", "%Y/%m/%d"):
+                try:
+                    event_date = datetime.datetime.strptime(event_date, fmt).date()
+                    break
+                except ValueError:
+                    continue
+
+        if isinstance(event_date, datetime.date):
             if today < event_date:
                 return Response(
                     {'error': f'Attendance scanning is not open yet. This event is scheduled for {event_date.strftime("%B %d, %Y")}.'},
