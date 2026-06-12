@@ -442,6 +442,8 @@ class QRScanSerializer(serializers.Serializer):
     """Serializer for QR scan requests"""
     qr_token = serializers.CharField(required=True)
     student_id = serializers.IntegerField(required=True)
+    latitude = serializers.FloatField(required=False, allow_null=True)
+    longitude = serializers.FloatField(required=False, allow_null=True)
 
 
 # ============ Admin Dashboard Attendance Serializers ============

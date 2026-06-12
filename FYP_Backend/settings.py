@@ -69,6 +69,10 @@ CV_MODULE_VERIFY_URL = os.environ.get(
 )
 CV_MODULE_TIMEOUT_SECONDS = float(os.environ.get('CV_MODULE_TIMEOUT_SECONDS', '15'))
 
+# Default radius (meters) to use for event geofencing when event-specific radius is not set.
+# Set to 20km by default so attendance QR covers an organization/campus.
+EVENTS_GEOFENCE_RADIUS_METERS = 20000
+
 # CORS – allow the Vite dev server (default port 5173) and any other local frontend
 _default_cors_origins = [
     'http://localhost:5173',
@@ -246,7 +250,7 @@ SIMPLE_JWT = {
 # - For testing: set ATTENDANCE_REQUIRE_RFID=0 to allow QR-only or RFID-only
 if TESTING:
     # Keep unit tests deterministic (2FA on by default); tests can override via override_settings.
-    ATTENDANCE_REQUIRE_RFID = False
+    ATTENDANCE_REQUIRE_RFID = True
 else:
     ATTENDANCE_REQUIRE_RFID = os.environ.get('ATTENDANCE_REQUIRE_RFID', '0').strip().lower() in {
         '1', 'true', 'yes', 'y', 'on'

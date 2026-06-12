@@ -25,6 +25,18 @@ from .serializers import (
 )
 
 
+def _haversine_distance_m(lat1, lon1, lat2, lon2):
+    """Return distance in meters between two lat/lon points using Haversine."""
+    from math import radians, sin, cos, sqrt, atan2
+
+    R = 6371000.0
+    dlat = radians(lat2 - lat1)
+    dlon = radians(lon2 - lon1)
+    a = sin(dlat / 2) ** 2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon / 2) ** 2
+    c = 2 * atan2(sqrt(a), sqrt(1 - a))
+    return R * c
+
+
 class IsOwnerOrReadOnly(permissions.BasePermission):
     def has_object_permission(self, request, view, obj):
         if request.method in permissions.SAFE_METHODS:
@@ -479,6 +491,34 @@ class EventAttendanceByLinkView(APIView):
                 {'error': 'Attendance is closed for this event'},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+        # Enforce geofence when event has coordinates set
+        if event.geo_latitude is not None and event.geo_longitude is not None:
+            lat = request.data.get('latitude')
+            lon = request.data.get('longitude')
+            if lat is None or lon is None:
+                return Response(
+                    {'error': 'latitude and longitude are required to mark attendance for this event'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            try:
+                lat = float(lat)
+                lon = float(lon)
+                event_lat = float(event.geo_latitude)
+                event_lon = float(event.geo_longitude)
+            except (TypeError, ValueError):
+                return Response(
+                    {'error': 'Invalid latitude/longitude values'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            distance_m = _haversine_distance_m(event_lat, event_lon, lat, lon)
+            radius_m = getattr(settings, 'EVENTS_GEOFENCE_RADIUS_METERS', 250)
+            if distance_m > (radius_m or 0):
+                return Response(
+                    {'error': f'Outside event radius ({distance_m:.1f}m > {radius_m}m)'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
 
         face_image = request.FILES.get('face_image') or request.FILES.get('file')
         is_match, verify_payload = _verify_face_for_user(request.user, face_image, stored_embedding=registration.face_embedding)

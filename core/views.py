@@ -51,6 +51,20 @@ from .models import (
 )
 from events.models import EventParticipant, EventAdvisor
 
+
+def _haversine_distance_m(lat1, lon1, lat2, lon2):
+    """Return distance in meters between two lat/lon points using Haversine."""
+    from math import radians, sin, cos, sqrt, atan2
+
+    # Earth radius in meters
+    R = 6371000.0
+
+    dlat = radians(lat2 - lat1)
+    dlon = radians(lon2 - lon1)
+    a = sin(dlat / 2) ** 2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon / 2) ** 2
+    c = 2 * atan2(sqrt(a), sqrt(1 - a))
+    return R * c
+
 # ============ Unified Frontend-Compatible Endpoints ============
 
 
@@ -2721,6 +2735,31 @@ class QRScanView(APIView):
                 {'error': 'Student does not belong to this management'},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+        # Enforce geofence when session has coordinates set
+        if session.latitude is not None and session.longitude is not None:
+            lat = serializer.validated_data.get('latitude')
+            lon = serializer.validated_data.get('longitude')
+            if lat is None or lon is None:
+                return Response(
+                    {'error': 'latitude and longitude are required for this session'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            try:
+                lat = float(lat)
+                lon = float(lon)
+            except (TypeError, ValueError):
+                return Response(
+                    {'error': 'Invalid latitude/longitude values'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            distance_m = _haversine_distance_m(session.latitude, session.longitude, lat, lon)
+            if distance_m > (session.radius_meters or 0):
+                return Response(
+                    {'error': f'Outside session radius ({distance_m:.1f}m > {session.radius_meters}m)'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
 
         # Get or create attendance record
         record, created = AttendanceRecord.objects.get_or_create(
